@@ -1,204 +1,153 @@
-import random
-import copy
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
+import random
+import copy
 
-# تعریف تکه‌ها: مختصات نسبی
-PIECES = [
-    [(0, 0), (1, 0), (2, 0), (2, 1)],      # L-shaped (horizontal)
-    [(0, 0), (1, 0), (2, 0), (2, 1)],      # L-shaped (vertical)
-    [(0, 0), (1, 0), (2, 0), (3, 0)],      # Line
-    [(0, 0), (0, 1), (1, 1), (2, 1), (2, 0)],  # Reverse +
-    [(1, 0), (0, 1), (1, 1), (2, 1), (1, 2)],  # Cross
-    [(0, 0), (1, 0), (2, 0), (3, 0)],      # Horizontal line
-    [(1, 0), (0, 1), (1, 1), (2, 1)],      # T-shape
-    [(0, 0), (1, 0), (1, 1)],              # L mini
-    [(0, 0), (1, 0), (2, 0)],              # Small line
-    [(0, 0), (1, 0), (0, 1), (1, 1)],      # Square
-    [(0, 0), (1, 0), (2, 0), (2, -1)],     # Left semicircle
-    [(1, 0), (0, 1), (1, 1)]               # T mini
-]
+BOARD_WIDTH = 11
+BOARD_HEIGHT = 5
+POPULATION_SIZE = 100
+NUM_GENERATIONS = 100
 
-# ایجاد پازل خالی
-def generate_puzzle(width=5, length=11):
-    return np.full((width, length), -1)
+MUTATION_RATE = 0.2
+TOURNAMENT_SIZE = 5
 
-# نمایش متنی پازل
-def display_puzzle(puzzle):
-    for row in puzzle:
-        print(" ".join(f"{cell:2}" if cell != -1 else " ." for cell in row))
+# قطعات تعریف‌شده
+PIECES = {
+    0: np.array([[1, 1], [1, 1]]),
+    1: np.array([[1, 1, 1], [0, 1, 0]]),
+    2: np.array([[1, 1, 1, 1]]),
+    3: np.array([[1, 0], [1, 1], [1, 0]]),
+    4: np.array([[1, 1, 0], [0, 1, 1]]),
+    5: np.array([[1, 1, 1], [1, 0, 0]]),
+    6: np.array([[1, 1], [1, 0], [1, 0]]),
+    7: np.array([[1, 1, 1], [0, 0, 1]]),
+    8: np.array([[0, 1], [1, 1], [1, 0]]),
+    9: np.array([[1, 1], [1, 1], [1, 0]]),
+    10: np.array([[1, 1, 0], [0, 1, 1]]),
+    11: np.array([[1, 0], [1, 1], [0, 1]]),
+}
 
-# چرخش تصادفی 0°, 90°, 180°, 270°
-def random_rotation_dice(piece):
-    rotations = [
-        lambda x, y: (x, y),
-        lambda x, y: (-y, x),
-        lambda x, y: (-x, -y),
-        lambda x, y: (y, -x),
-    ]
-    rotation = random.choice(rotations)
-    return [rotation(x, y) for (x, y) in piece]
+def rotate_piece(piece):
+    return [np.rot90(piece, k) for k in range(4)]
 
-# قرار دادن یک تکه روی پازل
-def place_piece(puzzle, piece, x, y, piece_id):
-    new_puzzle = puzzle.copy()
-    for dx, dy in piece:
-        nx, ny = x + dx, y + dy
-        if 0 <= nx < puzzle.shape[0] and 0 <= ny < puzzle.shape[1]:
-            if new_puzzle[nx][ny] != -1:
-                return None
-        else:
-            return None
-    for dx, dy in piece:
-        nx, ny = x + dx, y + dy
-        new_puzzle[nx][ny] = piece_id
-    return new_puzzle
+def get_all_variants(piece):
+    variants = []
+    for rot in rotate_piece(piece):
+        if not any(np.array_equal(rot, v) for v in variants):
+            variants.append(rot)
+        flip = np.fliplr(rot)
+        if not any(np.array_equal(flip, v) for v in variants):
+            variants.append(flip)
+    return variants
 
-# تولید یک فرد تصادفی اولیه
-def generate_random_individual(pieces, puzzle_shape):
-    puzzle = generate_puzzle(*puzzle_shape)
-    placement = []
-    for i, piece in enumerate(pieces):
-        placed = False
-        for _ in range(100):
-            rotated = random_rotation_dice(piece)
-            x = random.randint(0, puzzle_shape[0] - 1)
-            y = random.randint(0, puzzle_shape[1] - 1)
-            new_puzzle = place_piece(puzzle, rotated, x, y, i)
-            if new_puzzle is not None:
-                puzzle = new_puzzle
-                placement.append((rotated, x, y))
-                placed = True
-                break
-        if not placed:
-            placement.append(None)
-    return placement
+ALL_VARIANTS = {k: get_all_variants(p) for k, p in PIECES.items()}
 
-# تابع امتیازدهی (جمع طول همه تکه‌های قرارگرفته)
-def fitness(individual, puzzle_shape):
-    puzzle = generate_puzzle(*puzzle_shape)
-    score = 0
-    for i, placement in enumerate(individual):
-        if placement is not None:
-            piece, x, y = placement
-            result = place_piece(puzzle, piece, x, y, i)
-            if result is not None:
-                puzzle = result
-                score += len(piece)
-    return score
+def place_piece(board, piece, x, y):
+    px, py = piece.shape
+    if x + px > board.shape[0] or y + py > board.shape[1]:
+        return False
+    sub = board[x:x+px, y:y+py]
+    if np.any((sub != -1) & (piece == 1)):
+        return False
+    board[x:x+px, y:y+py][piece == 1] = 1
+    return True
 
-# جهش ساده با احتمال کم
-def mutate(individual, pieces, puzzle_shape):
-    if random.random() > 0.05:
-        return individual
-    idx = random.randint(0, len(individual) - 1)
-    new_piece = random_rotation_dice(pieces[idx])
-    x = random.randint(0, puzzle_shape[0] - 1)
-    y = random.randint(0, puzzle_shape[1] - 1)
+def evaluate(individual):
+    board = np.full((BOARD_HEIGHT, BOARD_WIDTH), -1)
+    filled = 0
+    for i, (piece_id, variant, x, y) in enumerate(individual):
+        piece = ALL_VARIANTS[piece_id][variant]
+        temp_board = board.copy()
+        if place_piece(temp_board, piece, x, y):
+            mask = (piece == 1)
+            temp_board[x:x+piece.shape[0], y:y+piece.shape[1]][mask] = piece_id
+            board = temp_board
+            filled += np.sum(piece)
+    return filled
+
+
+def create_individual():
+    pieces = list(PIECES.keys())
+    random.shuffle(pieces)
+    individual = []
+    for piece_id in pieces:
+        variants = ALL_VARIANTS[piece_id]
+        variant = random.randint(0, len(variants) - 1)
+        piece = variants[variant]
+        x = random.randint(0, BOARD_HEIGHT - piece.shape[0])
+        y = random.randint(0, BOARD_WIDTH - piece.shape[1])
+        individual.append((piece_id, variant, x, y))
+    return individual
+
+def mutate(individual):
     new_ind = copy.deepcopy(individual)
-    new_ind[idx] = (new_piece, x, y)
+    idx = random.randint(0, len(new_ind) - 1)
+    piece_id, variant, x, y = new_ind[idx]
+    variants = ALL_VARIANTS[piece_id]
+    variant = random.randint(0, len(variants) - 1)
+    piece = variants[variant]
+    x = random.randint(0, BOARD_HEIGHT - piece.shape[0])
+    y = random.randint(0, BOARD_WIDTH - piece.shape[1])
+    new_ind[idx] = (piece_id, variant, x, y)
     return new_ind
 
-# جستجوی محلی ساده (hill-climbing)
-def local_hill_climb(individual, pieces, puzzle_shape, iters=20):
-    best = copy.deepcopy(individual)
-    best_score = fitness(best, puzzle_shape)
-    for _ in range(iters):
-        i = random.randrange(len(best))
-        new = copy.deepcopy(best)
-        rotated = random_rotation_dice(pieces[i])
-        x = random.randint(0, puzzle_shape[0] - 1)
-        y = random.randint(0, puzzle_shape[1] - 1)
-        new[i] = (rotated, x, y)
-        sc = fitness(new, puzzle_shape)
-        if sc > best_score:
-            best, best_score = new, sc
-    return best
+def crossover(p1, p2):
+    cut = random.randint(1, len(p1) - 2)
+    child = p1[:cut] + p2[cut:]
+    seen = set()
+    result = []
+    for gene in child:
+        if gene[0] not in seen:
+            result.append(gene)
+            seen.add(gene[0])
+    # تکمیل ژن‌های حذف‌شده
+    missing = [pid for pid in PIECES if pid not in seen]
+    for pid in missing:
+        variants = ALL_VARIANTS[pid]
+        variant = random.randint(0, len(variants) - 1)
+        piece = variants[variant]
+        x = random.randint(0, BOARD_HEIGHT - piece.shape[0])
+        y = random.randint(0, BOARD_WIDTH - piece.shape[1])
+        result.append((pid, variant, x, y))
+    return result
 
-# کراس‌اور بهبود یافته با اولویت قطعات بزرگ و جستجوی محلی
-def crossover_improved(parent1, parent2, pieces, puzzle_shape, base_fill_attempts=30):
-    # 1) کراس‌اور یکنواخت
-    prelim = [(parent1[i] if random.random()<0.5 else parent2[i]) for i in range(len(parent1))]
+def tournament(population):
+    return max(random.sample(population, TOURNAMENT_SIZE), key=lambda ind: evaluate(ind))
 
-    # 2) تعمیر
-    child = [None] * len(prelim)
-    temp_puzzle = generate_puzzle(*puzzle_shape)
-    for i, placement in enumerate(prelim):
-        if placement:
-            p, x, y = placement
-            res = place_piece(temp_puzzle, p, x, y, i)
-            if res is not None:
-                temp_puzzle = res
-                child[i] = placement
-
-    # 3) تکمیل هوشمند: بزرگ‌ترها اول
-    missing = [i for i, g in enumerate(child) if g is None]
-    missing.sort(key=lambda i: -len(pieces[i]))
-    for i in missing:
-        attempts = base_fill_attempts + len(pieces[i]) * 5
-        for _ in range(attempts):
-            rotated = random_rotation_dice(pieces[i])
-            x = random.randint(0, puzzle_shape[0] - 1)
-            y = random.randint(0, puzzle_shape[1] - 1)
-            res = place_piece(temp_puzzle, rotated, x, y, i)
-            if res is not None:
-                temp_puzzle = res
-                child[i] = (rotated, x, y)
-                break
-
-    # 4) جستجوی محلی برای بهبود نهایی
-    child = local_hill_climb(child, pieces, puzzle_shape, iters=20)
-    return child
-
-# نمایش گرافیکی پازل نهایی
-def display_puzzle_graphically(puzzle):
-    cmap = plt.cm.get_cmap('tab20', np.max(puzzle) + 2)
-    norm = mcolors.BoundaryNorm(boundaries=np.arange(-1, np.max(puzzle) + 2), ncolors=np.max(puzzle) + 2)
-    plt.figure(figsize=(11, 5))
-    plt.imshow(puzzle, cmap=cmap, norm=norm)
-    plt.xticks([])
-    plt.yticks([])
-    plt.title("IQ Puzzler Pro - Final Solution")
-    plt.grid(False)
+def draw(individual):
+    board = np.full((BOARD_HEIGHT, BOARD_WIDTH), -1)
+    for i, (piece_id, variant, x, y) in enumerate(individual):
+        piece = ALL_VARIANTS[piece_id][variant]
+        # بررسی اینکه قطعه قابل قرار دادن هست
+        temp_board = board.copy()
+        if place_piece(temp_board, piece, x, y):
+            mask = (piece == 1)
+            board[x:x+piece.shape[0], y:y+piece.shape[1]][mask] = piece_id
+    cmap = plt.colormaps.get_cmap('tab20')
+    plt.imshow(board, cmap=cmap)
+    plt.axis('off')
     plt.show()
 
-# الگوریتم ژنتیک اصلی
-def iq_puzzler_genetic(puzzle, pieces, population_size=500, generations=2000):
-    puzzle_shape = puzzle.shape
-    population = [generate_random_individual(pieces, puzzle_shape) for _ in range(population_size)]
 
-    for gen in range(generations):
-        scored = [(ind, fitness(ind, puzzle_shape)) for ind in population]
-        scored.sort(key=lambda x: x[1], reverse=True)
-        maintain_len = int(population_size * 0.3)
-        elites = [ind for ind, _ in scored[:maintain_len]]
-        best_fit = scored[0][1]
-        print(f"Generation {gen}, Best fitness: {best_fit}")
-        if best_fit >= sum(len(p) for p in pieces):
-            break
+# اجرای الگوریتم ژنتیک
+population = [create_individual() for _ in range(POPULATION_SIZE)]
 
-        new_gen = []
-        while len(new_gen) < population_size - maintain_len:
-            p1, p2 = random.sample(elites, 2)
-            child = crossover_improved(p1, p2, pieces, puzzle_shape)
-            if random.random() < 0.01:
-                child = mutate(child, pieces, puzzle_shape)
-            new_gen.append(child)
-        population = elites + new_gen
+for gen in range(NUM_GENERATIONS):
+    population.sort(key=lambda ind: evaluate(ind), reverse=True)
+    best = evaluate(population[0])
+    print(f"Generation {gen}, Best fitness: {best}")
+    if best == BOARD_WIDTH * BOARD_HEIGHT:
+        break
 
-    best_ind = scored[0][0]
-    final = generate_puzzle(*puzzle_shape)
-    for i, placement in enumerate(best_ind):
-        if placement:
-            p, x, y = placement
-            res = place_piece(final, p, x, y, i)
-            if res is not None:
-                final = res
-    return final
+    new_pop = [population[0]]
+    while len(new_pop) < POPULATION_SIZE:
+        p1 = tournament(population)
+        p2 = tournament(population)
+        child = crossover(p1, p2)
+        if random.random() < MUTATION_RATE:
+            child = mutate(child)
+        new_pop.append(child)
+    population = new_pop
 
-if __name__ == '__main__':
-    puzzle = generate_puzzle(5, 11)
-    solved = iq_puzzler_genetic(puzzle, PIECES, population_size=3000, generations=500)
-    display_puzzle(solved)
-    display_puzzle_graphically(solved)
+# نمایش بهترین جواب
+draw(population[0])
