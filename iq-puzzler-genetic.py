@@ -8,23 +8,23 @@ BOARD_HEIGHT = 5
 POPULATION_SIZE = 100
 NUM_GENERATIONS = 100
 
-MUTATION_RATE = 0.2
+MUTATION_RATE = 0.4
 TOURNAMENT_SIZE = 5
 
 # قطعات تعریف‌شده
 PIECES = {
-    0: np.array([[1, 1], [1, 1]]),
-    1: np.array([[1, 1, 1], [0, 1, 0]]),
-    2: np.array([[1, 1, 1, 1]]),
-    3: np.array([[1, 0], [1, 1], [1, 0]]),
-    4: np.array([[1, 1, 0], [0, 1, 1]]),
-    5: np.array([[1, 1, 1], [1, 0, 0]]),
-    6: np.array([[1, 1], [1, 0], [1, 0]]),
-    7: np.array([[1, 1, 1], [0, 0, 1]]),
-    8: np.array([[0, 1], [1, 1], [1, 0]]),
-    9: np.array([[1, 1], [1, 1], [1, 0]]),
-    10: np.array([[1, 1, 0], [0, 1, 1]]),
-    11: np.array([[1, 0], [1, 1], [0, 1]]),
+    0: np.array([[1, 1], [1, 1]]),                        # مهره خاکستری (شماره 10) - مربع 2x2
+    1: np.array([[1, 1, 1], [0, 1, 0]]),                  # مهره صورتی (شماره 6) - صلیب
+    2: np.array([[1, 1, 1, 1]]),                          # مهره صورتی پررنگ (شماره 7) - خط افقی
+    3: np.array([[1, 0], [1, 1], [1, 0]]),                # مهره قرمز (شماره 2)
+    4: np.array([[1, 1, 0], [0, 1, 1]]),                  # مهره نارنجی (شماره 4)
+    5: np.array([[1, 1, 1], [1, 0, 0]]),                  # مهره سبز (شماره 9)
+    6: np.array([[1, 1], [1, 0], [1, 0]]),                # مهره آبی روشن (شماره 1)
+    7: np.array([[1, 1, 1], [0, 0, 1]]),                  # مهره سفید (شماره 5)
+    8: np.array([[0, 1], [1, 1], [1, 0]]),                # مهره بنفش (شماره 3)
+    9: np.array([[1, 1], [1, 1], [1, 0]]),                # مهره آبی تیره (شماره 8)
+    10: np.array([[1, 0], [1, 1], [0, 1]]),               # مهره قهوه‌ای (شماره 11)
+    11: np.array([[1, 1], [1, 0]]),                       # مهره زرد (شماره 12) - فقط ۳ دایره
 }
 
 def rotate_piece(piece):
@@ -55,7 +55,10 @@ def place_piece(board, piece, x, y):
 def evaluate(individual):
     board = np.full((BOARD_HEIGHT, BOARD_WIDTH), -1)
     filled = 0
-    for i, (piece_id, variant, x, y) in enumerate(individual):
+    used_piece_ids = set()
+    for piece_id, variant, x, y in individual:
+        if piece_id in used_piece_ids:
+            continue  # این مهره قبلاً استفاده شده
         piece = ALL_VARIANTS[piece_id][variant]
         temp_board = board.copy()
         if place_piece(temp_board, piece, x, y):
@@ -63,7 +66,20 @@ def evaluate(individual):
             temp_board[x:x+piece.shape[0], y:y+piece.shape[1]][mask] = piece_id
             board = temp_board
             filled += np.sum(piece)
+            used_piece_ids.add(piece_id)
     return filled
+
+def print_board(individual):
+    board = np.full((BOARD_HEIGHT, BOARD_WIDTH), -1)
+    for piece_id, variant, x, y in individual:
+        piece = ALL_VARIANTS[piece_id][variant]
+        if place_piece(board, piece, x, y):
+            mask = (piece == 1)
+            board[x:x+piece.shape[0], y:y+piece.shape[1]][mask] = piece_id
+
+    print("Final Board:")
+    for row in board:
+        print(" ".join(f"{cell:2}" if cell != -1 else " ." for cell in row))
 
 
 def create_individual():
@@ -151,3 +167,4 @@ for gen in range(NUM_GENERATIONS):
 
 # نمایش بهترین جواب
 draw(population[0])
+print_board(population[0])
