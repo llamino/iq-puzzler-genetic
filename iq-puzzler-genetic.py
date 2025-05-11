@@ -1,31 +1,45 @@
 import numpy as np
+import matplotlib
+matplotlib.use("TkAgg")  # or 'Qt5Agg', 'Agg', etc., depending on what you have installed
+
 import matplotlib.pyplot as plt
 import random
 import copy
 
 BOARD_WIDTH = 11
 BOARD_HEIGHT = 5
-POPULATION_SIZE = 100
-NUM_GENERATIONS = 100
+POPULATION_SIZE = 400
+NUM_GENERATIONS = 200
 
 MUTATION_RATE = 0.4
 TOURNAMENT_SIZE = 5
 
-# قطعات تعریف‌شده
-PIECES = {
-    0: np.array([[1, 1], [1, 1]]),                        # مهره خاکستری (شماره 10) - مربع 2x2
-    1: np.array([[1, 1, 1], [0, 1, 0]]),                  # مهره صورتی (شماره 6) - صلیب
-    2: np.array([[1, 1, 1, 1]]),                          # مهره صورتی پررنگ (شماره 7) - خط افقی
-    3: np.array([[1, 0], [1, 1], [1, 0]]),                # مهره قرمز (شماره 2)
-    4: np.array([[1, 1, 0], [0, 1, 1]]),                  # مهره نارنجی (شماره 4)
-    5: np.array([[1, 1, 1], [1, 0, 0]]),                  # مهره سبز (شماره 9)
-    6: np.array([[1, 1], [1, 0], [1, 0]]),                # مهره آبی روشن (شماره 1)
-    7: np.array([[1, 1, 1], [0, 0, 1]]),                  # مهره سفید (شماره 5)
-    8: np.array([[0, 1], [1, 1], [1, 0]]),                # مهره بنفش (شماره 3)
-    9: np.array([[1, 1], [1, 1], [1, 0]]),                # مهره آبی تیره (شماره 8)
-    10: np.array([[1, 0], [1, 1], [0, 1]]),               # مهره قهوه‌ای (شماره 11)
-    11: np.array([[1, 1], [1, 0]]),                       # مهره زرد (شماره 12) - فقط ۳ دایره
-}
+# تعریف اولیه قطعات با مختصات
+SHAPES = [
+    [(0, 0), (0, 1), (0, 2), (1, 2)],                         # Black
+    [(0, 0), (0, 1), (1, 0), (1, 1)],                         # Gray
+    [(0, 0), (0, 1), (1, 1)],                                 # Yellow
+    [(0, 0), (1, 0), (2, 0), (2, 1), (3, 0)],                 # Green
+    [(0, 1), (1, 0), (1, 1), (1, 2), (2, 1)],                 # Cream
+    [(0, 0), (0, 1), (1, 1), (2, 0), (2, 1)],                 # Orange
+    [(0, 1), (0, 2), (1, 0), (1, 1), (2, 0)],                 # Purple
+    [(0, 1), (0, 2), (1, 0), (1, 1), (1, 2)],                 # Blue
+    [(0, 0), (0, 1), (0, 2), (0, 3)],                         # Pink
+    [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0)],                 # White
+    [(0, 1), (0, 2), (0, 3), (1, 0), (1, 1)],                 # Red
+    [(0, 2), (1, 2), (2, 0), (2, 1), (2, 2)],                 # Light blue
+]
+
+# تبدیل به آرایه باینری
+def shape_to_array(shape):
+    max_x = max(x for x, y in shape)
+    max_y = max(y for x, y in shape)
+    arr = np.zeros((max_x + 1, max_y + 1), dtype=int)
+    for x, y in shape:
+        arr[x, y] = 1
+    return arr
+
+PIECES = {i: shape_to_array(s) for i, s in enumerate(SHAPES)}
 
 def rotate_piece(piece):
     return [np.rot90(piece, k) for k in range(4)]
@@ -58,7 +72,7 @@ def evaluate(individual):
     used_piece_ids = set()
     for piece_id, variant, x, y in individual:
         if piece_id in used_piece_ids:
-            continue  # این مهره قبلاً استفاده شده
+            continue
         piece = ALL_VARIANTS[piece_id][variant]
         temp_board = board.copy()
         if place_piece(temp_board, piece, x, y):
@@ -81,7 +95,6 @@ def print_board(individual):
     for row in board:
         print(" ".join(f"{cell:2}" if cell != -1 else " ." for cell in row))
 
-
 def create_individual():
     pieces = list(PIECES.keys())
     random.shuffle(pieces)
@@ -98,7 +111,7 @@ def create_individual():
 def mutate(individual):
     new_ind = copy.deepcopy(individual)
     idx = random.randint(0, len(new_ind) - 1)
-    piece_id, variant, x, y = new_ind[idx]
+    piece_id, variant, _, _ = new_ind[idx]
     variants = ALL_VARIANTS[piece_id]
     variant = random.randint(0, len(variants) - 1)
     piece = variants[variant]
@@ -134,7 +147,6 @@ def draw(individual):
     board = np.full((BOARD_HEIGHT, BOARD_WIDTH), -1)
     for i, (piece_id, variant, x, y) in enumerate(individual):
         piece = ALL_VARIANTS[piece_id][variant]
-        # بررسی اینکه قطعه قابل قرار دادن هست
         temp_board = board.copy()
         if place_piece(temp_board, piece, x, y):
             mask = (piece == 1)
@@ -165,6 +177,5 @@ for gen in range(NUM_GENERATIONS):
         new_pop.append(child)
     population = new_pop
 
-# نمایش بهترین جواب
 draw(population[0])
 print_board(population[0])
